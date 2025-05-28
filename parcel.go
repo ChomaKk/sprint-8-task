@@ -39,20 +39,14 @@ func (s ParcelStore) Get(number int) (Parcel, error) {
 
 	// заполните объект Parcel данными из таблицы
 	p := Parcel{}
-	rows, err := s.db.Query("SELECT * FROM parcel WHERE number = :number",
+
+	row := s.db.QueryRow("SELECT * FROM parcel WHERE number = :number",
 		sql.Named("number", number))
-	if err != nil {
-		return p, err
-	}
-	defer rows.Close()
 
-	if !rows.Next() {
-		return p, sql.ErrNoRows
-	}
+	err := row.Scan(&p.Number, &p.Client, &p.Status, &p.Address, &p.CreatedAt)
 
-	err = rows.Scan(&p.Number, &p.Client, &p.Status, &p.Address, &p.CreatedAt)
 	if err != nil {
-		return p, err
+		return Parcel{}, err
 	}
 
 	return p, nil
@@ -66,16 +60,23 @@ func (s ParcelStore) GetByClient(client int) ([]Parcel, error) {
 	var res []Parcel
 	rows, err := s.db.Query("SELECT * FROM parcel WHERE client = :client", sql.Named("client", client))
 	if err != nil {
-		return res, err
+		return nil, err
 	}
 	defer rows.Close()
+
 	for rows.Next() {
 		var p Parcel
+
 		err := rows.Scan(&p.Number, &p.Client, &p.Status, &p.Address, &p.CreatedAt)
 		if err != nil {
-			return res, err
+			return nil, err
 		}
+
 		res = append(res, p)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 
 	return res, nil
@@ -96,33 +97,14 @@ func (s ParcelStore) SetStatus(number int, status string) error {
 func (s ParcelStore) SetAddress(number int, address string) error {
 	// реализуйте обновление адреса в таблице parcel
 	// менять адрес можно только если значение статуса registered
-	p, err := s.Get(number)
+
+	_, err := s.db.Exec("UPDATE parcel SET address = :address WHERE number = :number and status = :status",
+		sql.Named("address", address),
+		sql.Named("number", number),
+		sql.Named("status", "registered"))
 	if err != nil {
+		fmt.Println(err)
 		return err
-	}
-
-	// Изначально обработал это как ошибку,
-	// но чтобы результат работы примерно совпал с тем, что представлено в задании,
-	// соответственно обработал без ошибки
-	//if p.Status != "registered" {
-	//	return errors.New("Невозможно изменить адрес, посылка уже в пути или доставлена")
-	//}
-	//_, err = s.db.Exec("UPDATE parcel SET address = :address WHERE number = :number",
-	//	sql.Named("address", address),
-	//	sql.Named("number", number))
-	//if err != nil {
-	//	fmt.Println(err)
-	//	return err
-	//}
-
-	if p.Status == "registered" {
-		_, err = s.db.Exec("UPDATE parcel SET address = :address WHERE number = :number",
-			sql.Named("address", address),
-			sql.Named("number", number))
-		if err != nil {
-			fmt.Println(err)
-			return err
-		}
 	}
 
 	return nil
@@ -131,29 +113,12 @@ func (s ParcelStore) SetAddress(number int, address string) error {
 func (s ParcelStore) Delete(number int) error {
 	// реализуйте удаление строки из таблицы parcel
 	// удалять строку можно только если значение статуса registered
-	p, err := s.Get(number)
+
+	_, err := s.db.Exec("DELETE FROM parcel WHERE number = :number and status = :status",
+		sql.Named("number", number),
+		sql.Named("status", "registered"))
 	if err != nil {
 		return err
-	}
-
-	// Изначально обработал это как ошибку,
-	// но чтобы результат работы примерно совпал с тем, что представлено в задании,
-	// соответственно обработал без ошибки
-	//if p.Status != "registered" {
-	//	return errors.New("Невозможно удалить посылку, она уже в пути или доставлена")
-	//}
-	//_, err = s.db.Exec("DELETE FROM parcel WHERE number = :number",
-	//	sql.Named("number", number))
-	//if err != nil {
-	//	return err
-	//}
-
-	if p.Status == "registered" {
-		_, err = s.db.Exec("DELETE FROM parcel WHERE number = :number",
-			sql.Named("number", number))
-		if err != nil {
-			return err
-		}
 	}
 
 	return nil
